@@ -78,17 +78,22 @@ def _parse_pdf(file_bytes: bytes) -> str:
 
 
 def _parse_docx(file_bytes: bytes) -> str:
-    """解析 DOCX 文件为纯文本（含表格内容）。"""
+    """
+    解析 DOCX 文件为纯文本。
+
+    按文档顺序提取所有 w:p 段落（含文本框、形状内的段落——很多中文简历模板
+    把文字放在文本框里，document.paragraphs 抓不到），并去掉连续重复行。
+    """
     import docx
+    from docx.oxml.ns import qn
 
     document = docx.Document(io.BytesIO(file_bytes))
-    blocks = [p.text for p in document.paragraphs]
-    # 简历里的信息经常放在表格中，一并提取
-    for table in document.tables:
-        for row in table.rows:
-            cells = [cell.text.strip() for cell in row.cells]
-            blocks.append("\t".join(cells))
-    return "\n".join(blocks)
+    lines = []
+    for p in document.element.iter(qn("w:p")):
+        txt = "".join(e.text for e in p.iter(qn("w:t")) if e.text).strip()
+        if txt and txt != (lines[-1] if lines else None):
+            lines.append(txt)
+    return "\n".join(lines)
 
 
 def _parse_txt(file_bytes: bytes) -> str:
